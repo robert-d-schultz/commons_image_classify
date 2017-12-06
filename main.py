@@ -1,13 +1,16 @@
 import numpy as np
 import tensorflow as tf
 import os
+import numpy
+import sys
 
 tf.logging.set_verbosity(tf.logging.INFO)
+numpy.set_printoptions(threshold=sys.maxsize)
 
 def cnn_model_fn(features, labels, mode):
     """Model function for CNN."""
     # Input Layer
-    input_layer = tf.reshape(features, [-1, 28, 28, 1])
+    input_layer = tf.reshape(features, [-1, 28, 28, 3])
 
     # Convolutional Layer #1
     conv1 = tf.layers.conv2d( inputs = input_layer
@@ -45,7 +48,7 @@ def cnn_model_fn(features, labels, mode):
     logits = tf.layers.dense(inputs = dropout, units = 2)
 
     # Generate predictions (for PREDICT and EVAL mode)
-    predictions = { "classes": tf.argmax(input = logits, axis = 1)
+    predictions = { "classes": tf.argmax(input = logits, axis = 1, name = "foobar")
                   , "probabilities": tf.nn.softmax(logits, name = "softmax_tensor")
                   }
     if mode == tf.estimator.ModeKeys.PREDICT:
@@ -85,13 +88,11 @@ def eval_confusion_matrix(labels, predictions):
 def my_input_fn():
     above_list = []
     for f in os.listdir('./above_data_train/'):
-        if f.endswith(".png"):
-            above_list.append(os.path.join('./above_data_train/', f))
+        above_list.append(os.path.join('./above_data_train/', f))
 
     below_list = []
     for g in os.listdir('./below_data_train/'):
-        if g.endswith(".png"):
-            below_list.append(os.path.join('./below_data_train/', g))
+        below_list.append(os.path.join('./below_data_train/', g))
 
     filename_list = above_list + below_list
     label_list = [1]*len(above_list) + [0]*len(below_list)
@@ -101,55 +102,53 @@ def my_input_fn():
     filenames_queue, labels_queue = tf.train.slice_input_producer([filenames, labels], shuffle = True)
 
     images_queue = tf.read_file(filenames_queue)
-    images_queue = tf.image.decode_png(images_queue, channels = 1)
+    images_queue = tf.image.decode_png(images_queue, channels = 3)
     images_queue = tf.image.resize_images(images_queue, [28, 28])
 
-    return tf.train.batch([images_queue, labels_queue], batch_size = 100, num_threads = 4)
+    return tf.train.batch([images_queue, labels_queue], batch_size = 50, num_threads = 32)
 
 def my_eval_input_fn():
     above_list2 = []
-    for f in os.listdir('./above_data_eval/'):
-        if f.endswith(".png"):
-            above_list2.append(os.path.join('./above_data_eval/', f))
+    for f in os.listdir('./above_data_eval2/'):
+        above_list2.append(os.path.join('./above_data_eval2/', f))
 
     below_list2 = []
-    for g in os.listdir('./below_data_eval/'):
-        if g.endswith(".png"):
-            below_list2.append(os.path.join('./below_data_eval/', g))
+    for g in os.listdir('./below_data_eval2/'):
+        below_list2.append(os.path.join('./below_data_eval2/', g))
 
     filename_list2 = above_list2 + below_list2
     label_list2 = [1]*len(above_list2) + [0]*len(below_list2)
 
     filenames2 = tf.convert_to_tensor(filename_list2, dtype = tf.string)
     labels2 = tf.convert_to_tensor(label_list2, dtype = tf.int32)
-    filenames_queue2, labels_queue2 = tf.train.slice_input_producer([filenames2, labels2], shuffle = True)
+    filenames_queue2, labels_queue2 = tf.train.slice_input_producer([filenames2, labels2], shuffle = False)
 
     images_queue2 = tf.read_file(filenames_queue2)
-    images_queue2 = tf.image.decode_png(images_queue2, channels = 1)
+    images_queue2 = tf.image.decode_png(images_queue2, channels = 3)
     images_queue2 = tf.image.resize_images(images_queue2, [28, 28])
-    return tf.train.batch([images_queue2, labels_queue2], batch_size = 100, num_threads = 4)
+    return tf.train.batch([images_queue2, labels_queue2], batch_size = 302, num_threads = 32)
 
 
 def main(unused_argv):
-  # Create the Estimator
-  logo_classifier = tf.estimator.Estimator(
-      model_fn = cnn_model_fn, model_dir = "./logo_convnet_model")
+    # Create the Estimator
+    logo_classifier = tf.estimator.Estimator(
+        model_fn = cnn_model_fn, model_dir = "./logo_new_convnet_model")
 
-  # Set up logging for predictions
-  # Log the values in the "Softmax" tensor with label "probabilities"
-  tensors_to_log = {"probabilities": "softmax_tensor"}
-  logging_hook = tf.train.LoggingTensorHook(
-      tensors = tensors_to_log, every_n_iter = 50)
+    # Set up logging for predictions
+    # Log the values in the "Softmax" tensor with label "probabilities"
+    tensors_to_log = {"probabilities": "softmax_tensor", "classes": "foobar"}
+    logging_hook = tf.train.LoggingTensorHook(
+        tensors = tensors_to_log, every_n_iter = 50)
 
-  # Train the model
-  logo_classifier.train(
-      input_fn = my_input_fn,
-      steps = 20000,
-      hooks = [logging_hook])
+    # Train the model
+    #logo_classifier.train(
+    #    input_fn = my_input_fn,
+    #    steps = 200000,
+    #    hooks = [logging_hook])
 
-  # Evaluate the model and print results
-  eval_results = logo_classifier.evaluate(input_fn = my_eval_input_fn,steps = 2)
-  print(eval_results)
+    # Evaluate the model and print results
+    eval_results = logo_classifier.evaluate(input_fn = my_eval_input_fn, steps = 1, hooks = [logging_hook])
+    print(eval_results)
 
-if __name__ = =  "__main__":
+if __name__ ==  "__main__":
   tf.app.run()
